@@ -16,10 +16,12 @@ import android.media.AudioTrack
 import android.media.VolumeProvider
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.Settings
 
 /**
@@ -57,6 +59,14 @@ class RemoteService : Service() {
     private var original = -1
     private var baseline = -1
     private var restoring = false
+
+    // Keep the CPU and Wi-Fi radio awake while a PC is connected, so the link
+    // (and its 2-second ping) survives the screen locking. Without these the
+    // phone silently freezes a few minutes after the screen turns off: the
+    // socket goes dead but the app never notices, so it looks "connected"
+    // while the PC has already timed it out.
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -132,8 +142,18 @@ class RemoteService : Service() {
             session = s
         } catch (_: Exception) {}
 
-        Bus.armVolume = { main.post { arm() } }
-        if (Bus.isConnected?.invoke() == true) arm()
+        Bus.armVolume = { main.post { onConnectionChanged() } }
+        if (Bus.isConnected?.invoke() == true) onConnectionChanged()
+    }
+
+    /** Called whenever the link connects or disconnects. */
+    private fun onConnectionChanged() {
+        if (Bus.isConnected?.invoke() == true) {
+            arm()
+            acquireLocks()
+        } else {
+            releaseLocks()
+        }
     }
 
     /** A PC is connected: put the media volume in the middle so both keys can be noticed. */
@@ -141,6 +161,31 @@ class RemoteService : Service() {
         val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         baseline = (max / 2).coerceAtLeast(1)
         setVolume(baseline)
+    }
+
+    private fun acquireLocks() {
+        if (wakeLock != null) return
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "uor-rc:remote").apply {
+                setReferenceCounted(false)
+                acquire(6 * 60 * 60 * 1000L) // safety cap so a stuck lock can't drain the battery forever
+            }
+        } catch (_: Exception) {}
+        try {
+            val wm = getSystemService(Context.WIFI_SERVICE) as WifiManager
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "uor-rc:wifi").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun releaseLocks() {
+        try { wakeLock?.let { if (it.isHeld) it.release() } } catch (_: Exception) {}
+        wakeLock = null
+        try { wifiLock?.let { if (it.isHeld) it.release() } } catch (_: Exception) {}
+        wifiLock = null
     }
 
     private fun onVolumeChanged() {
@@ -164,6 +209,7 @@ class RemoteService : Service() {
 
     override fun onDestroy() {
         Bus.armVolume = null
+        releaseLocks()
         try { observer?.let { contentResolver.unregisterContentObserver(it) } } catch (_: Exception) {}
         try { track?.stop(); track?.release() } catch (_: Exception) {}
         try { session?.isActive = false; session?.release() } catch (_: Exception) {}
