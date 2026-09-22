@@ -500,7 +500,11 @@ class MainActivity : Activity(), Link.Listener, WifiSide.Callback, TouchpadView.
         // 1) computers found on Wi-Fi (faster, preferred)
         if (connMode() != "bt") {
             beacons.values.filter { now - it.seen < 6000 }.forEach { b ->
-                items.add(Item("📶  ${b.name}   · ${L.t("viaWifi")}") {
+                // link.isConnected is false here (this menu only opens while disconnected), so a
+                // beacon still reporting "connected" means a *different* phone is using that PC.
+                val busy = b.connected
+                items.add(Item("📶  ${b.name}   · ${L.t("viaWifi")}" + if (busy) "  🔴" else "") {
+                    if (busy) { Toast.makeText(this, L.t("pcBusy"), Toast.LENGTH_LONG).show(); return@Item }
                     val go = {
                         prefs.edit().putString("pcId", b.id).putString("pcName", b.name).apply()
                         everConnected = false
@@ -1922,7 +1926,7 @@ class MainActivity : Activity(), Link.Listener, WifiSide.Callback, TouchpadView.
      */
     private fun updateVolumeSession() {
         Bus.volumeKeysWanted = prefs.getBoolean("volKeys", true)
-        if (link.isConnected) Bus.armVolume?.invoke()
+        Bus.armVolume?.invoke()   // also tells RemoteService to release its wake/Wi-Fi locks when not connected
     }
 
     /** Start / stop the lock-screen helper (only allowed while Remco is on screen). */
