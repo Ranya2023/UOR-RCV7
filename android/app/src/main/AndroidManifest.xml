@@ -13,6 +13,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- keeps the CPU and Wi-Fi radio from sleeping while a PC is connected, so the link survives the screen locking -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- "Make a hotspot on this phone" (Android's local-only hotspot) -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <!-- "Phone screen on PC" -->
