@@ -20,7 +20,12 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- OFF on purpose: a compressed single-file .NET exe unpacks itself into memory at
+         startup, which is exactly the behaviour Windows SmartScreen / Defender / Chrome's
+         download-reputation check flag as a "dangerous file" (false positive). Turning
+         compression off makes the exe bigger but stops it looking like a self-extracting
+         packer, which is the single biggest fix available without a paid code-signing cert. -->
+    <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
     <DebugType>none</DebugType>
     <ApplicationIcon>remco.ico</ApplicationIcon>
   </PropertyGroup>
